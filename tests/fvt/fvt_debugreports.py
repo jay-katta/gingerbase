@@ -40,7 +40,8 @@ class Debugreports(TestBase):
     @classmethod
     def setUpClass(self):
         super(Debugreports, self).setUpClass()
-        self.validator = Validator()
+        self.validator = Validator(self.logging)
+        self.logging = self.session.logging
 
     def test_S001_create_debug_report(self):
         """

@@ -74,7 +74,11 @@ class HostTests(unittest.TestCase):
         else:
             keys = ['os_distro', 'os_version', 'os_codename', 'cpu_model',
                     'memory', 'cpus', 'architecture', 'host']
-            self.assertEquals(psutil.TOTAL_PHYMEM, info['memory']['online'])
+            try:
+                total_phymem = psutil.TOTAL_PHYMEM
+            except AttributeError:
+                total_phymem = psutil.virtual_memory().total
+            self.assertEquals(total_phymem, info['memory']['online'])
         self.assertEquals(sorted(keys), sorted(info.keys()))
 
         distro, version, codename = platform.linux_distribution()
@@ -147,3 +151,22 @@ class HostTests(unittest.TestCase):
         self.assertIn(u'All packages updated', task_info['message'])
         pkgs = model.packagesupdate_get_list()
         self.assertEquals(0, len(pkgs))
+
+    def test_swupdateprogress(self):
+        resp = self.request('/plugins/gingerbase/host/swupdateprogress',
+                            None, 'GET')
+        task = json.loads(resp.read())
+        self.assertEquals(202, resp.status)
+
+        for i in xrange(1, 6):
+            resp = self.request('/tasks/' + task['id'], None, 'GET')
+            task = json.loads(resp.read())
+            self.assertEquals(200, resp.status)
+            self.assertIn('*', task['message'].rstrip('\n'))
+            time.sleep(1)
+
+        resp = self.request('/tasks/' + task['id'], None, 'GET')
+        task = json.loads(resp.read())
+        self.assertEquals(200, resp.status)
+        self.assertEqual(task['status'], 'finished')
+        time.sleep(1)

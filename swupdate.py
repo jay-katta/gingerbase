@@ -25,7 +25,7 @@ import signal
 import subprocess
 import time
 from configobj import ConfigObj, ConfigObjError
-from psutil import pid_exists
+from psutil import pid_exists, process_iter
 
 from wok.basemodel import Singleton
 from wok.exception import NotFoundError, OperationFailed
@@ -59,7 +59,7 @@ class SoftwareUpdate(object):
         try:
             __import__('dnf')
             wok_log.info("Loading YumUpdate features.")
-            self._pkg_mnger = YumUpdate()
+            self._pkg_mnger = DnfUpdate()
         except ImportError:
             try:
                 __import__('yum')
@@ -289,6 +289,35 @@ class YumUpdate(object):
         return False
 
 
+class DnfUpdate(YumUpdate):
+    """
+    Class to represent and operate with DNF software update system.
+    It's loaded only on those systems listed at DNF_DISTROS and loads necessary
+    modules in runtime.
+    """
+    def __init__(self):
+        self._pkgs = {}
+        self.update_cmd = ["dnf", "-y", "update"]
+        self.logfile = '/var/log/dnf.log'
+
+    def isRunning(self):
+        """
+        Return True whether the YUM package manager is already running or
+        False otherwise.
+        """
+        pid = None
+        try:
+            for dnf_proc in process_iter():
+                if 'dnf' in dnf_proc.name():
+                    pid = dnf_proc.pid
+                    break
+        except:
+            return False
+
+        # the pidfile exists and it lives in process table
+        return pid_exists(pid)
+
+
 class AptUpdate(object):
     """
     Class to represent and operate with APT software update system.
@@ -297,7 +326,6 @@ class AptUpdate(object):
     """
     def __init__(self):
         self._pkgs = {}
-        self.pkg_lock = getattr(__import__('apt_pkg'), 'SystemLock')
         self.update_cmd = ['apt-get', 'upgrade', '-y']
         self.logfile = '/var/log/apt/term.log'
 
@@ -307,12 +335,10 @@ class AptUpdate(object):
         """
         apt_cache = getattr(__import__('apt'), 'Cache')()
         try:
-            with self.pkg_lock():
-                apt_cache.update()
-                apt_cache.upgrade()
-                self._pkgs = apt_cache.get_changes()
+            apt_cache.update()
+            apt_cache.upgrade()
+            self._pkgs = apt_cache.get_changes()
         except Exception, e:
-            gingerBaseLock.release()
             raise OperationFailed('GGBPKGUPD0003E', {'err': e.message})
 
     def getPackagesList(self):
@@ -326,8 +352,13 @@ class AptUpdate(object):
             raise OperationFailed('GGBPKGUPD0005E')
 
         gingerBaseLock.acquire()
-        self._refreshUpdateList()
-        gingerBaseLock.release()
+        try:
+            self._refreshUpdateList()
+        except Exception:
+            raise
+        finally:
+            gingerBaseLock.release()
+
         pkg_list = []
         for pkg in self._pkgs:
             package = {'package_name': pkg.shortname,

@@ -1,7 +1,8 @@
+#!/bin/bash
+
+# Project Ginger
 #
-# Ginger Base
-#
-# Copyright IBM Corp, 2014-2016
+# Copyright IBM Corp, 2016
 #
 # This library is free software; you can redistribute it and/or
 # modify it under the terms of the GNU Lesser General Public
@@ -15,12 +16,16 @@
 #
 # You should have received a copy of the GNU Lesser General Public
 # License along with this library; if not, write to the Free Software
-# Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301 USA
+# Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301  USA
 
-ko_KR_helpdir = $(datadir)/wok/plugins/gingerbase/ui/pages/help/ko_KR
-
-dist_ko_KR_help_DATA = $(wildcard *.html) $(NULL)
-
-EXTRA_DIST = $(wildcard *.dita)
-
-CLEANFILES = $(wildcard *.html)
+for FILE in $(git grep --cached -Il '' | \
+	grep -v '^check-IBM-license-header.sh' )
+do
+    FIRST=$(git log --pretty=format:%cd --date=short $FILE | cut -d - -f 1 | sort | uniq | head -1)
+    LAST=$(git log --pretty=format:%cd --date=short $FILE | cut -d - -f 1 | sort | uniq | tail -1)
+    if [ $FIRST -eq $LAST ]; then
+        sed -i s/" Copyright.*IBM.*"/" Copyright IBM Corp, "$FIRST/g $FILE
+    else
+        sed -i s/" Copyright.*IBM.*"/" Copyright IBM Corp, "$FIRST"-"$LAST/g $FILE
+    fi
+done
